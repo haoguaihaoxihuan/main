@@ -1,144 +1,180 @@
-"""练习任务1: 房价预测
-**任务描述**: 使用加州房价数据集,完成以下任务:
-1. 加载数据并进行探索性分析
-2. 进行特征工程(标准化、特征选择)
-3. 使用线性回归、决策树、随机森林分别训练模型
-4. 比较三种模型的性能(MSE、R²)
-5. 输出特征重要性排序"""
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.datasets import fetch_california_housing
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.feature_selection import SelectKBest, f_regression
-
-# 配置中文字体
-plt.rcParams['font.sans-serif'] = ['SimHei']
-plt.rcParams['axes.unicode_minus'] = False
-
-
-# 1. 加载数据并探索性分析
-print("\n1. 加载数据与探索性分析 ")
-housing = fetch_california_housing()
-X = pd.DataFrame(housing.data, columns=housing.feature_names)
-y = pd.Series(housing.target, name='MedHouseValue')
-
-print(f"样本数: {X.shape[0]}, 特征数: {X.shape[1]}")
-print(f"\n特征名称: {list(housing.feature_names)}")
-print(f"\n数据预览:\n{X.head()}")
-print(f"\n统计描述:\n{X.describe()}")
-print(f"\n目标变量统计:\n{y.describe()}")
-
-# 绘制特征分布与相关性
-fig, axes = plt.subplots(2, 4, figsize=(16, 8))
-axes = axes.flatten()
-for i, col in enumerate(X.columns):
-    axes[i].hist(X[col], bins=50, color='steelblue', edgecolor='white')
-    axes[i].set_title(col)
-    axes[i].set_xlabel('')
-plt.suptitle('特征分布直方图', fontsize=14)
-plt.tight_layout()
-plt.savefig('01_feature_distribution.png', dpi=100)
-plt.close()
-print("已保存特征分布图: 01_feature_distribution.png")
-
-# 相关性热力图
-plt.figure(figsize=(10, 8))
-corr = pd.concat([X, y], axis=1).corr()
 import seaborn as sns
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+import os
+import matplotlib
+import matplotlib.font_manager as fm
 
-sns.heatmap(corr, annot=True, fmt='.2f', cmap='coolwarm', center=0)
-plt.title('特征相关性热力图')
+os.makedirs("output", exist_ok=True)
+
+# 清除字体缓存
+fm._load_fontmanager(try_read_cache=False)
+
+# 设置seaborn整体绘图风格（注意：这会覆盖matplotlib的字体设置）
+sns.set_style("whitegrid")    # 可选：white / dark / whitegrid / darkgrid / ticks
+sns.set_context("notebook")   # 控制字体大小：paper / notebook / talk / poster
+
+# 【重要】在seaborn样式设置之后，重新配置中文字体
+plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "SimSun"]
+plt.rcParams["axes.unicode_minus"] = False
+plt.rcParams["font.size"] = 12
+
+# 创建保存图片文件夹，避免报错
+if not os.path.exists("sns_output"):
+    os.mkdir("sns_output")
+
+
+# 先下载保存到本地，再从本地读取（避免网络不佳导致的问题）
+# tips = sns.load_dataset("tips")       # 小费数据集（餐饮消费）
+# iris = sns.load_dataset("iris")       # 鸢尾花数据集
+# flights = sns.load_dataset("flights") # 航班客流时序数据
+
+# 保存到本地CSV文件
+# tips.to_csv("tips.csv", index=False)
+# # iris.to_csv("iris.csv", index=False)
+# # flights.to_csv("flights.csv", index=False)
+
+# print("数据集已保存到本地CSV文件")
+
+print("=== 从本地CSV文件读取数据集 ===")
+tips = pd.read_csv("tips.csv")
+iris = pd.read_csv("iris.csv")
+
+print("=== tips数据集前5行 ===")
+print(tips.head())
+print("\n=== 数据集字段类型 ===")
+print(tips.dtypes)
+
+"""习题 1：绘制小费金额 (`tip`) 的分布直方图，要求包含核密度曲线，分箱数为 30。"""
+plt.figure(figsize=(8, 5))
+sns.histplot(data=tips, x="tip", kde=True, bins=30, color="purple")
+plt.title("小费金额分布直方图（含核密度）", fontsize=13)
+plt.xlabel("消费金额")
+plt.ylabel("频次")
 plt.tight_layout()
-plt.savefig('02_correlation_heatmap.png', dpi=100)
-plt.close()
-print("已保存相关性热力图: 02_correlation_heatmap.png")
+plt.savefig("output/01_hist.png", dpi=300, bbox_inches="tight")
+plt.show()
 
-# 2. 特征工程
-print("\n2. 特征工程 ")
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# 标准化
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_test_scaled = scaler.transform(X_test)
-print("已完成标准化")
+"""习题 2：绘制总账单 (`total_bill`) 的核密度图，按是否吸烟 (`smoker`) 分组对比。"""
+plt.figure(figsize=(8, 5))
+sns.kdeplot(data=tips, x="total_bill", hue="smoker", linewidth=2)
+plt.title("总账单核密度（按吸烟分组）", fontsize=13)
+plt.xlabel("总账单")
+plt.ylabel("密度")
+plt.tight_layout()
+plt.savefig("output/ex02_kde.png", dpi=300, bbox_inches="tight")
+plt.show()
 
-# 特征选择 (SelectKBest, k=5)
-selector = SelectKBest(score_func=f_regression, k=5)
-X_train_selected = selector.fit_transform(X_train_scaled, y_train)
-X_test_selected = selector.transform(X_test_scaled)
-selected_features = X.columns[selector.get_support()].tolist()
-print(f"选择的特征 (k=5): {selected_features}")
-print(f"特征选择后维度: {X_train_selected.shape}")
 
-# 3. 训练三种模型
-print("\n--- 3. 模型训练 ---")
+"""习题 3：绘制箱线图，X 轴为用餐时段 (`time`)，Y 轴为小费 (`tip`)，按性别 (`sex`) 分组颜色。"""
+plt.figure(figsize=(8, 5))
+sns.boxplot(data=tips, x="time", y="tip", hue="sex", palette="Set2")
+plt.title("不同时段小费分布（分性别）", fontsize=13)
+plt.xlabel("用餐时段")
+plt.ylabel("小费")
+plt.tight_layout()
+plt.savefig("output/ex03_boxplot.png", dpi=300, bbox_inches="tight")
+plt.show()
 
-models = {
-    '线性回归': LinearRegression(),
-    '决策树': DecisionTreeRegressor(max_depth=10, random_state=42),
-    '随机森林': RandomForestRegressor(n_estimators=100, max_depth=15, random_state=42, n_jobs=-1)
-}
 
-results = []
-for name, model in models.items():
-    if name == '线性回归':
-        model.fit(X_train_selected, y_train)
-        y_pred = model.predict(X_test_selected)
-    else:
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
+"""习题 4：绘制小提琴图，X 轴为星期 (`day`)，Y 轴为小费 (`tip`)，按时段 (`time`) 分组并分割显示 (`split=True`)。"""
+plt.figure(figsize=(9, 5))
+sns.violinplot(data=tips, x="day", y="tip", hue="time", split=True, palette="RdBu")
+plt.title("各星期小费分布（分时段分割小提琴图）", fontsize=13)
+plt.xlabel("星期")
+plt.ylabel("小费")
+plt.tight_layout()
+plt.savefig("output/ex04_violin.png", dpi=300, bbox_inches="tight")
+plt.show()
 
-    mse = mean_squared_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
-    results.append({'模型': name, 'MSE': mse, 'R²': r2})
-    print(f"{name}: MSE={mse:.4f}, R²={r2:.4f}")
 
-# 4. 模型性能对比
-print("\n4. 模型性能对比 ")
-df_results = pd.DataFrame(results)
-print(df_results.to_string(index=False))
+"""习题 5：绘制柱状图，X 轴为星期 (`day`)，Y 轴为小费 (`tip`)，**不显示误差线**。"""
+plt.figure(figsize=(7, 5))
+sns.barplot(data=tips, x="day", y="tip", palette="Blues_d", ci=None)
+plt.title("各星期平均小费（无误差线）", fontsize=13)
+plt.xlabel("星期")
+plt.ylabel("平均小费")
+plt.tight_layout()
+plt.savefig("output/ex05_bar.png", dpi=300, bbox_inches="tight")
+plt.show()
 
+
+"""习题 6：计算数值列的相关系数，绘制热力图，要求显示数值 (`annot=True`)，配色使用 `coolwarm`。"""
+plt.figure(figsize=(6, 5))
+corr_matrix = tips.select_dtypes(include=[np.number]).corr()
+sns.heatmap(
+    corr_matrix,
+    annot=True,
+    cmap="coolwarm",
+    vmin=-1, vmax=1,
+    square=True,
+    linewidths=0.5
+)
+plt.title("数值特征相关性热力图", fontsize=13)
+plt.tight_layout()
+plt.savefig("output/ex06_heatmap.png", dpi=300, bbox_inches="tight")
+plt.show()
+
+
+"""习题 7：绘制回归图，X 轴为账单，Y 轴为小费。要求按吸烟情况 (`smoker`) 分别画出两条回归线进行对比。"""
+plt.figure(figsize=(8, 5))
+sns.regplot(data=tips[tips["smoker"]=="Yes"], x="total_bill", y="tip",
+            color="red", label="吸烟", scatter_kws={"alpha":0.4})
+sns.regplot(data=tips[tips["smoker"]=="No"], x="total_bill", y="tip",
+            color="blue", label="不吸烟", scatter_kws={"alpha":0.4})
+plt.title("账单与小费回归关系（按吸烟分组）", fontsize=13)
+plt.xlabel("总账单")
+plt.ylabel("小费")
+plt.legend()
+plt.tight_layout()
+plt.savefig("output/ex07_regplot.png", dpi=300, bbox_inches="tight")
+plt.show()
+
+
+"""习题 8：使用尾花数据 (`iris`)，选取 `sepal_length`, `sepal_width`, `petal_length` 和 `species` 字段，绘制配对散点矩阵 (`pairplot`)。"""
+iris_sub = iris[["sepal_length", "sepal_width", "petal_length", "species"]]
+g = sns.pairplot(iris_sub, hue="species", height=2)
+g.fig.suptitle("鸢尾花特征配对矩阵", y=1.02, fontsize=14)
+g.savefig("output/ex08_pairplot.png", dpi=300, bbox_inches="tight")
+plt.show()
+
+
+"""习题 9：创建一个 2 行 1 列的子图画布：
+  * 上图：账单密度的核密度图。
+  * 下图：男女平均小费的柱状图。"""
+fig, axes = plt.subplots(2, 1, figsize=(8, 10))
+# 上图
+sns.kdeplot(data=tips, x="total_bill", fill=True, ax=axes[0])
+axes[0].set_title("总账单核密度图", fontsize=13)
+axes[0].set_xlabel("总账单")
+axes[0].set_ylabel("密度")
+# 下图
+sns.barplot(data=tips, x="sex", y="tip", ax=axes[1], ci=None, palette="pastel")
+axes[1].set_title("男女平均小费", fontsize=13)
+axes[1].set_xlabel("性别")
+axes[1].set_ylabel("平均小费")
+plt.tight_layout()
+plt.savefig("output/ex09_subplots.png", dpi=300, bbox_inches="tight")
+plt.show()
+
+
+"""习题 10（综合）：创建一个 1 行 2 列的子图画布：
+  * 左图：男女消费金额分布的小提琴图。
+  * 右图：一周每日平均消费的柱状图。
+  * 设置总标题为"餐饮消费综合可视化图表"。"""
 fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-axes[0].bar(df_results['模型'], df_results['MSE'], color=['#FF6B6B', '#4ECDC4', '#45B7D1'])
-axes[0].set_title('MSE 对比 (越低越好)')
-axes[0].set_ylabel('MSE')
-axes[0].grid(axis='y', alpha=0.3)
-
-axes[1].bar(df_results['模型'], df_results['R²'], color=['#FF6B6B', '#4ECDC4', '#45B7D1'])
-axes[1].set_title('R**2 对比 (越接近1越好)')
-axes[1].set_ylabel('R**2')
-axes[1].set_ylim([0, 1])
-axes[1].grid(axis='y', alpha=0.3)
-
+# 左图：男女总账单的小提琴图
+sns.violinplot(data=tips, x="sex", y="total_bill", ax=axes[0], palette="Set3")
+axes[0].set_title("男女消费金额小提琴图", fontsize=13)
+axes[0].set_xlabel("性别")
+axes[0].set_ylabel("总账单")
+# 右图：每日平均总账单的柱状图
+sns.barplot(data=tips, x="day", y="total_bill", ax=axes[1], ci=None, palette="Oranges_d")
+axes[1].set_title("各星期平均消费额", fontsize=13)
+axes[1].set_xlabel("星期")
+axes[1].set_ylabel("平均总账单")
 plt.tight_layout()
-plt.savefig('03_model_comparison.png', dpi=100)
-plt.close()
-print("已保存模型对比图: 03_model_comparison.png")
-
-# 5. 特征重要性排序 (基于随机森林)
-print("\n5. 特征重要性排序 (随机森林)")
-rf = RandomForestRegressor(n_estimators=100, max_depth=15, random_state=42, n_jobs=-1)
-rf.fit(X_train, y_train)
-importances = pd.Series(rf.feature_importances_, index=X.columns).sort_values(ascending=False)
-print(importances.to_string())
-
-plt.figure(figsize=(10, 6))
-importances.plot(kind='barh', color='steelblue')
-plt.title('随机森林特征重要性排序')
-plt.xlabel('重要性')
-plt.gca().invert_yaxis()
-plt.tight_layout()
-plt.savefig('04_feature_importance.png', dpi=100)
-plt.close()
-print("已保存特征重要性图: 04_feature_importance.png")
-
-print("\n" + "=" * 50)
-print("任务完成!")
-print("=" * 50)
+plt.savefig("output/ex10_combined.png", dpi=300, bbox_inches="tight")
+plt.show()
